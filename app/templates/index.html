@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Competitor Monitor</title>
+<style>
+  :root { --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --bg:#f9fafb; --accent:#2563eb;
+          --ok:#047857; --ok-bg:#ecfdf5; --warn:#92400e; --warn-bg:#fffbeb; --bad:#b91c1c; --bad-bg:#fef2f2; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 40px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  form { display:flex; gap:8px; }
+  input { flex:1; min-width:0; padding:12px 14px; font-size:16px; border:1px solid #d1d5db; border-radius:8px; background:#fff; }
+  input:focus { outline:2px solid var(--accent); outline-offset:-1px; border-color:transparent; }
+  button { padding:12px 20px; font-size:15px; font-weight:600; color:#fff; background:var(--ink); border:0; border-radius:8px; cursor:pointer; white-space:nowrap; }
+  button:disabled { opacity:.6; cursor:wait; }
+  .hint { color:var(--muted); font-size:13px; margin-top:8px; min-height:20px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:20px; margin-top:20px; }
+  .headline { font-size:21px; font-weight:700; margin:0; }
+  .msg { margin:6px 0 0; color:var(--muted); }
+  .status-ok { border-left:4px solid var(--ok); }
+  .status-bad { border-left:4px solid var(--bad); }
+  .stats { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-top:16px; }
+  .stat { background:var(--bg); border-radius:8px; padding:10px 12px; }
+  .stat b { display:block; font-size:18px; }
+  .stat span { font-size:12px; color:var(--muted); }
+  .notes { background:var(--warn-bg); color:var(--warn); border-radius:8px; padding:10px 14px; margin-top:16px; font-size:14px; }
+  .notes ul { margin:0; padding-left:18px; }
+  h2 { font-size:16px; margin:0 0 12px; }
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; min-width:600px; border-collapse:collapse; font-size:14px; }
+  th { text-align:left; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:600; padding:8px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  td { padding:10px; border-bottom:1px solid #f3f4f6; vertical-align:top; }
+  tr:last-child td { border-bottom:0; }
+  td a { color:var(--ink); font-weight:600; text-decoration:none; }
+  td a:hover { color:var(--accent); text-decoration:underline; }
+  .desc { color:var(--muted); font-size:13px; margin-top:2px; }
+  .url { color:#9ca3af; font-size:12px; word-break:break-all; }
+  .kw { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px; background:#eff6ff; color:#1e40af; padding:1px 6px; border-radius:4px; white-space:nowrap; }
+  .num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .nowrap { white-space:nowrap; }
+  .change { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px; }
+  details summary { cursor:pointer; font-weight:600; }
+  .small { font-size:13px; color:var(--muted); }
+  @media (max-width: 640px) {
+    form { flex-direction:column; }
+    .stats { grid-template-columns:repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Competitor Monitor</h1>
+  <p class="sub">Enter a competitor's domain to find their latest blog posts, see what's new since the last check,
+    get keyword data, track pricing changes and send a Slack alert.</p>
+
+  <form method="post" action="/" onsubmit="this.querySelector('button').disabled=true;
+        document.getElementById('hint').textContent='Checking… this usually takes 10–60 seconds.'">
+    <input name="domain" value="{{ domain }}" placeholder="e.g. ahrefs.com" required autofocus aria-label="Competitor domain">
+    <button type="submit">Check competitor</button>
+  </form>
+  <div class="hint" id="hint"></div>
+
+{% if result %}
+  <div class="card {{ 'status-ok' if result.status == 'ok' else 'status-bad' }}">
+    <p class="headline">{{ result.headline }}</p>
+    {% if result.message %}<p class="msg">{{ result.message }}</p>{% endif %}
+    {% if result.status == 'ok' and result.first_check %}
+      <p class="msg">First check of {{ result.domain }}: all {{ result.total_tracked }} posts found are now saved.
+        Run it again later and only posts published after today will be flagged as new.</p>
+    {% endif %}
+
+    {% if result.status == 'ok' %}
+    <div class="stats">
+      <div class="stat"><b>{{ result.new_posts|length }}</b><span>New posts</span></div>
+      <div class="stat"><b>{{ result.total_tracked }}</b><span>Posts tracked</span></div>
+      <div class="stat"><b>{{ result.pricing_changes|length }}</b><span>Pricing changes</span></div>
+      <div class="stat"><b style="font-size:14px">{{ result.alert_status }}</b><span>Alert</span></div>
+    </div>
+    {% endif %}
+
+    {% if result.notes %}
+    <div class="notes"><ul>{% for n in result.notes %}<li>{{ n }}</li>{% endfor %}</ul></div>
+    {% endif %}
+  </div>
+
+  {% if result.new_posts %}
+  <div class="card">
+    <h2>New posts</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Post</th><th>Published</th><th>Target keyword</th><th class="num">Search volume</th></tr></thead>
+      <tbody>
+      {% for p in result.new_posts %}
+        <tr>
+          <td><a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.title }}</a>
+            {% if p.description %}<div class="desc">{{ p.description }}</div>{% endif %}
+            <div class="url">{{ p.url }}</div></td>
+          <td class="nowrap">{{ p.published_at|date }}</td>
+          <td>{% if p.keyword %}<span class="kw">{{ p.keyword }}</span>{% else %}—{% endif %}</td>
+          <td class="num">{{ '{:,}'.format(p.search_volume) if p.search_volume is not none else 'n/a' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+  {% endif %}
+
+  {% if result.pricing_url or result.pricing_status %}
+  <div class="card">
+    <h2>Pricing</h2>
+    <p class="small" style="margin:0">{{ result.pricing_status }}{% if result.pricing_url %} · <a href="{{ result.pricing_url }}" target="_blank" rel="noopener">{{ result.pricing_url }}</a>{% endif %}</p>
+    {% if result.pricing_changes %}
+      <ul>{% for c in result.pricing_changes %}<li class="change">{{ c }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if tracked %}
+  <div class="card">
+    <details>
+      <summary>All tracked posts for {{ result.domain }} ({{ result.total_tracked }})</summary>
+      <div class="table-wrap" style="margin-top:12px"><table>
+        <thead><tr><th>Post</th><th>Published</th><th>First seen</th></tr></thead>
+        <tbody>
+        {% for p in tracked %}
+          <tr><td><a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.title or p.url }}</a>
+                  <div class="url">{{ p.url }}</div></td>
+              <td class="nowrap">{{ p.published_at|date }}</td>
+              <td class="nowrap">{{ p.first_seen_at|date }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      {% if result.total_tracked > tracked|length %}<p class="small">Showing the {{ tracked|length }} most recent.</p>{% endif %}
+      {% if result.sources %}<p class="small">Found via: {{ result.sources|join(' · ') }}</p>{% endif %}
+    </details>
+  </div>
+  {% endif %}
+{% endif %}
+</div>
+</body>
+</html>
